@@ -1,6 +1,6 @@
 {
   "name": "youtube-transcript-node",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "This is a Node.js API which allows you to get the transcripts/subtitles for a given YouTube video. It also works for automatically generated subtitles and supports translating subtitles.",
   "main": "src/index.js",
   "type": "module",
