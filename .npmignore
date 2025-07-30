@@ -6,3 +6,7 @@ example.js
 jest.config.js
 .DS_Store
 *.log
+src/
+tsconfig.json
+*.ts
+!*.d.ts

@@ -2,8 +2,12 @@
   "name": "youtube-transcript-node",
   "version": "1.1.1",
   "description": "This is a Node.js API which allows you to get the transcripts/subtitles for a given YouTube video. It also works for automatically generated subtitles and supports translating subtitles.",
-  "main": "src/index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/xatuke/youtube-transcript-node.git"
@@ -13,11 +17,13 @@
     "url": "https://github.com/xatuke/youtube-transcript-node/issues"
   },
   "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
-    "lint": "eslint src/**/*.js",
-    "format": "prettier --write src/**/*.js"
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
   },
   "keywords": [
     "youtube",
@@ -37,8 +43,11 @@
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@types/node": "^20.10.0",
+    "@types/xml2js": "^0.4.14",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
-    "prettier": "^3.1.1"
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.0"
   }
 }

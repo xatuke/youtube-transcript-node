@@ -1,14 +1,20 @@
 import { parseStringPromise } from 'xml2js';
 import { decode } from 'html-entities';
+import { AxiosInstance } from 'axios';
 import { 
   PoTokenRequired, 
   NotTranslatable, 
   TranslationLanguageNotAvailable,
   NoTranscriptFound 
 } from './errors/index.js';
+import { TranslationLanguage, TranscriptSnippetData } from './types.js';
 
 export class FetchedTranscriptSnippet {
-  constructor(text, start, duration) {
+  text: string;
+  start: number;
+  duration: number;
+
+  constructor(text: string, start: number, duration: number) {
     this.text = text;
     this.start = start;
     this.duration = duration;
@@ -16,7 +22,19 @@ export class FetchedTranscriptSnippet {
 }
 
 export class FetchedTranscript {
-  constructor(snippets, videoId, language, languageCode, isGenerated) {
+  snippets: FetchedTranscriptSnippet[];
+  videoId: string;
+  language: string;
+  languageCode: string;
+  isGenerated: boolean;
+
+  constructor(
+    snippets: FetchedTranscriptSnippet[], 
+    videoId: string, 
+    language: string, 
+    languageCode: string, 
+    isGenerated: boolean
+  ) {
     this.snippets = snippets;
     this.videoId = videoId;
     this.language = language;
@@ -24,15 +42,15 @@ export class FetchedTranscript {
     this.isGenerated = isGenerated;
   }
 
-  [Symbol.iterator]() {
+  [Symbol.iterator](): Iterator<FetchedTranscriptSnippet> {
     return this.snippets[Symbol.iterator]();
   }
 
-  get length() {
+  get length(): number {
     return this.snippets.length;
   }
 
-  toRawData() {
+  toRawData(): TranscriptSnippetData[] {
     return this.snippets.map(snippet => ({
       text: snippet.text,
       start: snippet.start,
@@ -42,7 +60,24 @@ export class FetchedTranscript {
 }
 
 export class Transcript {
-  constructor(httpClient, videoId, url, language, languageCode, isGenerated, translationLanguages) {
+  private _httpClient: AxiosInstance;
+  videoId: string;
+  private _url: string;
+  language: string;
+  languageCode: string;
+  isGenerated: boolean;
+  translationLanguages: TranslationLanguage[];
+  private _translationLanguagesDict: Record<string, string>;
+
+  constructor(
+    httpClient: AxiosInstance, 
+    videoId: string, 
+    url: string, 
+    language: string, 
+    languageCode: string, 
+    isGenerated: boolean, 
+    translationLanguages: TranslationLanguage[]
+  ) {
     this._httpClient = httpClient;
     this.videoId = videoId;
     this._url = url;
@@ -57,7 +92,7 @@ export class Transcript {
     }
   }
 
-  async fetch(preserveFormatting = false) {
+  async fetch(preserveFormatting = false): Promise<FetchedTranscript> {
     if (this._url.includes('&exp=xpe')) {
       throw new PoTokenRequired(this.videoId);
     }
@@ -74,11 +109,11 @@ export class Transcript {
     );
   }
 
-  async _parseTranscript(xmlData, preserveFormatting) {
+  private async _parseTranscript(xmlData: string, preserveFormatting: boolean): Promise<FetchedTranscriptSnippet[]> {
     const result = await parseStringPromise(xmlData);
-    const textElements = result.transcript.text || [];
+    const textElements = result.transcript?.text || [];
     
-    return textElements.map(element => {
+    return textElements.map((element: any) => {
       const text = preserveFormatting ? element._ : decode(element._).replace(/\s+/g, ' ').trim();
       const start = parseFloat(element.$.start);
       const duration = parseFloat(element.$.dur || '0');
@@ -87,11 +122,11 @@ export class Transcript {
     });
   }
 
-  get isTranslatable() {
+  get isTranslatable(): boolean {
     return this.translationLanguages.length > 0;
   }
 
-  translate(languageCode) {
+  translate(languageCode: string): Transcript {
     if (!this.isTranslatable) {
       throw new NotTranslatable(this.videoId);
     }
@@ -111,20 +146,32 @@ export class Transcript {
     );
   }
 
-  toString() {
+  toString(): string {
     return `${this.languageCode} ("${this.language}")${this.isTranslatable ? '[TRANSLATABLE]' : ''}`;
   }
 }
 
 export class TranscriptList {
-  constructor(videoId, manuallyCreatedTranscripts, generatedTranscripts, translationLanguages) {
+  videoId: string;
+  private _manuallyCreatedTranscripts: Record<string, Transcript>;
+  private _generatedTranscripts: Record<string, Transcript>;
+  private _translationLanguages: TranslationLanguage[];
+
+  static build: (httpClient: AxiosInstance, videoId: string, captionsJson: any) => TranscriptList;
+
+  constructor(
+    videoId: string, 
+    manuallyCreatedTranscripts: Record<string, Transcript>, 
+    generatedTranscripts: Record<string, Transcript>, 
+    translationLanguages: TranslationLanguage[]
+  ) {
     this.videoId = videoId;
     this._manuallyCreatedTranscripts = manuallyCreatedTranscripts;
     this._generatedTranscripts = generatedTranscripts;
     this._translationLanguages = translationLanguages;
   }
 
-  [Symbol.iterator]() {
+  [Symbol.iterator](): Iterator<Transcript> {
     const allTranscripts = [
       ...Object.values(this._manuallyCreatedTranscripts),
       ...Object.values(this._generatedTranscripts)
@@ -132,19 +179,19 @@ export class TranscriptList {
     return allTranscripts[Symbol.iterator]();
   }
 
-  findTranscript(languageCodes) {
+  findTranscript(languageCodes: string[]): Transcript {
     return this._findTranscript(languageCodes, [this._manuallyCreatedTranscripts, this._generatedTranscripts]);
   }
 
-  findGeneratedTranscript(languageCodes) {
+  findGeneratedTranscript(languageCodes: string[]): Transcript {
     return this._findTranscript(languageCodes, [this._generatedTranscripts]);
   }
 
-  findManuallyCreatedTranscript(languageCodes) {
+  findManuallyCreatedTranscript(languageCodes: string[]): Transcript {
     return this._findTranscript(languageCodes, [this._manuallyCreatedTranscripts]);
   }
 
-  _findTranscript(languageCodes, sources) {
+  private _findTranscript(languageCodes: string[], sources: Record<string, Transcript>[]): Transcript {
     for (const languageCode of languageCodes) {
       for (const source of sources) {
         if (languageCode in source) {
@@ -160,8 +207,8 @@ export class TranscriptList {
     );
   }
 
-  toString() {
-    const transcriptStrings = [];
+  toString(): string {
+    const transcriptStrings: string[] = [];
     
     if (Object.keys(this._manuallyCreatedTranscripts).length > 0) {
       transcriptStrings.push(

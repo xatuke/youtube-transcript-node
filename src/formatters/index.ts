@@ -1,46 +1,43 @@
-export class Formatter {
-  formatTranscript(transcript, kwargs = {}) {
-    throw new Error('A subclass of Formatter must implement their own .formatTranscript() method.');
-  }
+import { FetchedTranscript } from '../transcript.js';
 
-  formatTranscripts(transcripts, kwargs = {}) {
-    throw new Error('A subclass of Formatter must implement their own .formatTranscripts() method.');
-  }
+export abstract class Formatter {
+  abstract formatTranscript(transcript: FetchedTranscript, kwargs?: any): string;
+  abstract formatTranscripts(transcripts: FetchedTranscript[], kwargs?: any): string;
 }
 
 export class PrettyPrintFormatter extends Formatter {
-  formatTranscript(transcript, kwargs = {}) {
+  formatTranscript(transcript: FetchedTranscript, kwargs?: any): string {
     return JSON.stringify(transcript.toRawData(), null, 2);
   }
 
-  formatTranscripts(transcripts, kwargs = {}) {
+  formatTranscripts(transcripts: FetchedTranscript[], kwargs?: any): string {
     return JSON.stringify(transcripts.map(t => t.toRawData()), null, 2);
   }
 }
 
 export class JSONFormatter extends Formatter {
-  formatTranscript(transcript, kwargs = {}) {
-    return JSON.stringify(transcript.toRawData(), null, kwargs.indent);
+  formatTranscript(transcript: FetchedTranscript, kwargs?: { indent?: number }): string {
+    return JSON.stringify(transcript.toRawData(), null, kwargs?.indent);
   }
 
-  formatTranscripts(transcripts, kwargs = {}) {
-    return JSON.stringify(transcripts.map(t => t.toRawData()), null, kwargs.indent);
+  formatTranscripts(transcripts: FetchedTranscript[], kwargs?: { indent?: number }): string {
+    return JSON.stringify(transcripts.map(t => t.toRawData()), null, kwargs?.indent);
   }
 }
 
 export class TextFormatter extends Formatter {
-  formatTranscript(transcript, kwargs = {}) {
+  formatTranscript(transcript: FetchedTranscript, kwargs?: any): string {
     return transcript.snippets.map(snippet => snippet.text).join('\n');
   }
 
-  formatTranscripts(transcripts, kwargs = {}) {
+  formatTranscripts(transcripts: FetchedTranscript[], kwargs?: any): string {
     return transcripts.map(t => this.formatTranscript(t, kwargs)).join('\n\n\n');
   }
 }
 
 export class WebVTTFormatter extends Formatter {
-  formatTranscript(transcript, kwargs = {}) {
-    const lines = ['WEBVTT\n'];
+  formatTranscript(transcript: FetchedTranscript, kwargs?: any): string {
+    const lines: string[] = ['WEBVTT\n'];
     
     for (const snippet of transcript.snippets) {
       const start = this._secondsToTime(snippet.start);
@@ -53,11 +50,11 @@ export class WebVTTFormatter extends Formatter {
     return lines.join('\n');
   }
 
-  formatTranscripts(transcripts, kwargs = {}) {
+  formatTranscripts(transcripts: FetchedTranscript[], kwargs?: any): string {
     return transcripts.map(t => this.formatTranscript(t, kwargs)).join('\n\n');
   }
 
-  _secondsToTime(totalSeconds) {
+  private _secondsToTime(totalSeconds: number): string {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;

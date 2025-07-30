@@ -1,5 +1,5 @@
-import { YouTubeTranscriptApi } from './src/index.js';
-import { TextFormatter, JSONFormatter } from './src/formatters/index.js';
+import { YouTubeTranscriptApi } from './dist/index.js';
+import { TextFormatter, JSONFormatter } from './dist/formatters/index.js';
 
 async function main() {
   try {

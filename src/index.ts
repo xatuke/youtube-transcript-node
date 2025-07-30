@@ -1,13 +1,18 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import axiosRetry from 'axios-retry';
 import { TranscriptListFetcher } from './transcriptFetcher.js';
-import { NoTranscriptFound } from './errors/index.js';
+import { ProxyConfig } from './types.js';
+import { FetchedTranscript, TranscriptList } from './transcript.js';
 
 export * from './errors/index.js';
 export { FetchedTranscript, FetchedTranscriptSnippet, Transcript, TranscriptList } from './transcript.js';
+export * from './types.js';
 
 export class YouTubeTranscriptApi {
-  constructor(proxyConfig = null, httpClient = null) {
+  private _httpClient: AxiosInstance;
+  private _fetcher: TranscriptListFetcher;
+
+  constructor(proxyConfig: ProxyConfig | null = null, httpClient: AxiosInstance | null = null) {
     this._httpClient = httpClient || axios.create({
       headers: {
         'Accept-Language': 'en-US'
@@ -23,7 +28,7 @@ export class YouTubeTranscriptApi {
         this._httpClient.defaults.headers['Connection'] = 'close';
       }
       
-      if (proxyConfig.retriesWhenBlocked > 0) {
+      if (proxyConfig.retriesWhenBlocked && proxyConfig.retriesWhenBlocked > 0) {
         axiosRetry(this._httpClient, {
           retries: proxyConfig.retriesWhenBlocked,
           retryCondition: (error) => error.response?.status === 429
@@ -34,13 +39,13 @@ export class YouTubeTranscriptApi {
     this._fetcher = new TranscriptListFetcher(this._httpClient, proxyConfig);
   }
 
-  async fetch(videoId, languages = ['en'], preserveFormatting = false) {
+  async fetch(videoId: string, languages: string[] = ['en'], preserveFormatting = false): Promise<FetchedTranscript> {
     const transcriptList = await this.list(videoId);
     const transcript = transcriptList.findTranscript(languages);
     return transcript.fetch(preserveFormatting);
   }
 
-  async list(videoId) {
+  async list(videoId: string): Promise<TranscriptList> {
     return this._fetcher.fetch(videoId);
   }
 }

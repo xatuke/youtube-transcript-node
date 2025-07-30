@@ -1,4 +1,5 @@
 import { decode } from 'html-entities';
+import { AxiosInstance, AxiosError } from 'axios';
 import { 
   WATCH_URL, 
   INNERTUBE_API_URL, 
@@ -6,7 +7,6 @@ import {
 } from './utils/constants.js';
 import {
   TranscriptsDisabled,
-  NoTranscriptFound,
   YouTubeDataUnparsable,
   YouTubeRequestFailed,
   InvalidVideoId,
@@ -18,31 +18,41 @@ import {
   FailedToCreateConsentCookie
 } from './errors/index.js';
 import { Transcript, TranscriptList } from './transcript.js';
+import { 
+  ProxyConfig, 
+  CaptionsJson, 
+  PlayabilityStatusData, 
+  InnertubeData,
+  TranslationLanguage 
+} from './types.js';
 
 const PlayabilityStatus = {
   OK: 'OK',
   ERROR: 'ERROR',
   LOGIN_REQUIRED: 'LOGIN_REQUIRED'
-};
+} as const;
 
 const PlayabilityFailedReason = {
   BOT_DETECTED: 'Sign in to confirm you\'re not a bot',
   AGE_RESTRICTED: 'This video may be inappropriate for some users.',
   VIDEO_UNAVAILABLE: 'This video is unavailable'
-};
+} as const;
 
 export class TranscriptListFetcher {
-  constructor(httpClient, proxyConfig = null) {
+  private _httpClient: AxiosInstance;
+  private _proxyConfig: ProxyConfig | null;
+
+  constructor(httpClient: AxiosInstance, proxyConfig: ProxyConfig | null = null) {
     this._httpClient = httpClient;
     this._proxyConfig = proxyConfig;
   }
 
-  async fetch(videoId) {
+  async fetch(videoId: string): Promise<TranscriptList> {
     const captionsJson = await this._fetchCaptionsJson(videoId);
     return TranscriptList.build(this._httpClient, videoId, captionsJson);
   }
 
-  async _fetchCaptionsJson(videoId, tryNumber = 0) {
+  private async _fetchCaptionsJson(videoId: string, tryNumber = 0): Promise<CaptionsJson> {
     try {
       const html = await this._fetchVideoHtml(videoId);
       const apiKey = this._extractInnertubeApiKey(html, videoId);
@@ -59,7 +69,7 @@ export class TranscriptListFetcher {
     }
   }
 
-  _extractInnertubeApiKey(html, videoId) {
+  private _extractInnertubeApiKey(html: string, videoId: string): string {
     const pattern = /"INNERTUBE_API_KEY":\s*"([a-zA-Z0-9_-]+)"/;
     const match = html.match(pattern);
     
@@ -74,7 +84,7 @@ export class TranscriptListFetcher {
     throw new YouTubeDataUnparsable(videoId);
   }
 
-  _extractCaptionsJson(innertubeData, videoId) {
+  private _extractCaptionsJson(innertubeData: InnertubeData, videoId: string): CaptionsJson {
     this._assertPlayability(innertubeData.playabilityStatus, videoId);
     
     const captionsJson = innertubeData.captions?.playerCaptionsTracklistRenderer;
@@ -86,7 +96,7 @@ export class TranscriptListFetcher {
     return captionsJson;
   }
 
-  _assertPlayability(playabilityStatusData, videoId) {
+  private _assertPlayability(playabilityStatusData: PlayabilityStatusData | undefined, videoId: string): void {
     if (!playabilityStatusData) return;
     
     const playabilityStatus = playabilityStatusData.status;
@@ -95,7 +105,7 @@ export class TranscriptListFetcher {
       return;
     }
     
-    const reason = playabilityStatusData.reason;
+    const reason = playabilityStatusData.reason || '';
     
     if (playabilityStatus === PlayabilityStatus.LOGIN_REQUIRED) {
       if (reason === PlayabilityFailedReason.BOT_DETECTED) {
@@ -123,7 +133,7 @@ export class TranscriptListFetcher {
     throw new VideoUnplayable(videoId, reason, subReasons);
   }
 
-  async _createConsentCookie(html, videoId) {
+  private async _createConsentCookie(html: string, videoId: string): Promise<void> {
     const match = html.match(/name="v" value="(.*?)"/);
     if (!match) {
       throw new FailedToCreateConsentCookie(videoId);
@@ -133,7 +143,7 @@ export class TranscriptListFetcher {
     this._httpClient.defaults.headers.Cookie = `CONSENT=YES+${match[1]}`;
   }
 
-  async _fetchVideoHtml(videoId) {
+  private async _fetchVideoHtml(videoId: string): Promise<string> {
     let html = await this._fetchHtml(videoId);
     
     if (html.includes('action="https://consent.youtube.com/s"')) {
@@ -148,21 +158,22 @@ export class TranscriptListFetcher {
     return html;
   }
 
-  async _fetchHtml(videoId) {
+  private async _fetchHtml(videoId: string): Promise<string> {
     try {
       const response = await this._httpClient.get(
         WATCH_URL.replace('{video_id}', videoId)
       );
       return decode(response.data);
     } catch (error) {
-      if (error.response?.status === 429) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response?.status === 429) {
         throw new IpBlocked(videoId);
       }
-      throw new YouTubeRequestFailed(videoId, error);
+      throw new YouTubeRequestFailed(videoId, error as Error);
     }
   }
 
-  async _fetchInnertubeData(videoId, apiKey) {
+  private async _fetchInnertubeData(videoId: string, apiKey: string): Promise<InnertubeData> {
     try {
       const response = await this._httpClient.post(
         INNERTUBE_API_URL.replace('{api_key}', apiKey),
@@ -173,23 +184,28 @@ export class TranscriptListFetcher {
       );
       return response.data;
     } catch (error) {
-      if (error.response?.status === 429) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response?.status === 429) {
         throw new IpBlocked(videoId);
       }
-      throw new YouTubeRequestFailed(videoId, error);
+      throw new YouTubeRequestFailed(videoId, error as Error);
     }
   }
 }
 
 // Static build method for TranscriptList
-TranscriptList.build = function(httpClient, videoId, captionsJson) {
-  const translationLanguages = (captionsJson.translationLanguages || []).map(lang => ({
+TranscriptList.build = function(
+  httpClient: AxiosInstance, 
+  videoId: string, 
+  captionsJson: CaptionsJson
+): TranscriptList {
+  const translationLanguages: TranslationLanguage[] = (captionsJson.translationLanguages || []).map(lang => ({
     language: lang.languageName.runs[0].text,
     languageCode: lang.languageCode
   }));
   
-  const manuallyCreatedTranscripts = {};
-  const generatedTranscripts = {};
+  const manuallyCreatedTranscripts: Record<string, Transcript> = {};
+  const generatedTranscripts: Record<string, Transcript> = {};
   
   for (const caption of captionsJson.captionTracks) {
     const transcriptDict = caption.kind === 'asr' ? generatedTranscripts : manuallyCreatedTranscripts;
